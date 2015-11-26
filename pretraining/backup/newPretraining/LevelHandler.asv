@@ -1,0 +1,104 @@
+function [passed dataResults] = LevelHandler(dev,lev)
+wateropen = false;
+x=dev;
+currTrials=0;
+headIn=false;
+successCount=0;
+missCount=0;
+trialNumber=1;
+attempts=0;
+firsLick=true;
+firstBeam=true;
+dataResults=[];
+vopen=1;
+vclose=0;
+slave=1;
+valveNumber=2;
+passed=false;
+delay=0.5;
+lickCounter=0;
+disconn=true;
+if(lev.levelNumber>6)
+    logger = Logger(traileID,...
+        @(h2) invoke(h2, 'SetDigOut', 1 ,1 ,0),...
+        @(h2) invoke(h2, 'SetDigOut', 1 ,0 ,0));
+    [ h2, resultOpen, resultLastError, resultID]= olfactometerConnect(logger);
+end
+while (true)
+    data=x.inputSingleScan();
+    if (data(1)==1 && ~headIn )
+        
+        currTrials=currTrials+1;
+        headIn=true;
+        firstBeam=false;
+        if (lev.levelNumber>6)
+            olfactometerSetOder(h2, slave, logger, valveNumber, vopen);
+            activePause(delay, logger, h2, slave);
+            olfactometerSetFinalValve(h2, slave, logger, vopen);
+            % pause(delay)
+            valveOpen=tic
+        end
+    elseif (data(1)==0 && ~firstBeam)
+        headIn=false;
+        if (lickCounter<lev.lickThresh)
+            missCount=missCount+1;
+        end
+        
+     %   lickCounter=0;
+        dataVec=[currTrials attempts successCount missCount passed];
+        dataResults=[dataResults;dataVec];
+        attempts=0;
+        
+    end
+    
+    if (data(2)==1 && ~wateropen && disconn)
+        
+        %display(lev.levelNumber)
+        disconn=false;
+        lickCounter=lickCounter+1;
+        display(lickCounter)
+        attempts=attempts+1;
+        if firsLick
+            tic
+            firsLick=false;
+        end
+        if (lickCounter>=lev.lickThresh && toc*1000<=lev.timeWindow)
+            %giving water
+            wateropen=true;
+            display('water was given')
+            x.outputSingleScan(1);
+            pause(0.05);
+            x.outputSingleScan(0);
+            successCount=successCount+1;
+            lickCounter=0;
+            if (successCount>=lev.successesNeeded)
+                passed=true;
+                dataVec=[currTrials attempts successCount missCount passed];
+                dataResults=[dataResults;dataVec];
+                return;
+            end
+            wateropen=false;
+            pause(0.05);
+            pause(lev.interTrialInterval)
+        end
+    elseif (data(2)==0)
+        disconn=true;
+    end
+    if (headIn && lev.levelNumber>6)
+        if (toc(valveOpen)>2)
+            olfactometerSetOder(h2, slave, logger, valveNumber, vcolse);
+            olfactometerSetFinalValve(h2, slave, logger, vclose);
+        end
+    end
+    if(~firsLick)
+        if (toc*1000 >lev.timeWindow)
+            display('lickcounter zerored')
+            toc*1000
+            firsLick=true;
+            lickCounter=0;
+            
+        end
+    end
+end
+
+end

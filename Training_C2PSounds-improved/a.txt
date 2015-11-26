@@ -1,0 +1,3 @@
+10000.wav 1
+wcclean.wav 5
+wcflip.wav 2
